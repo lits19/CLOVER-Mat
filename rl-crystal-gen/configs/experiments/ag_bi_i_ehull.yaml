@@ -1,0 +1,69 @@
+# configs/experiments/ag_bi_i_ehull.yaml
+# ----------------------------------------
+# Full experiment config for Ag-Bi-I ternary E_hull-guided generation.
+
+experiment:
+  name: "ag_bi_i_ehull_grpo"
+  description: "RL-guided generation of stable Ag-Bi-I ternary halide perovskites"
+  seed: 42
+
+generator:
+  # Options: "chemeleon2" | "mock"
+  type: "chemeleon2"
+  checkpoint: "checkpoints/ldm_best.ckpt"
+  vae_checkpoint: "checkpoints/vae_best.ckpt"
+  device: "cuda"
+  n_diffusion_steps: 1000
+  guidance_scale: 1.0
+  # Chemical system constraint passed to LDM condition
+  condition:
+    elements: ["Ag", "Bi", "I"]
+
+reward:
+  components:
+    # Primary reward: thermodynamic stability via E_hull
+    - target: src.rewards.ehull_reward.EhullReward
+      weight: 1.0
+      normalize: zscore
+      backend: mp_api           # or "mace" for faster GPU estimation
+      stable_threshold: 0.1     # eV/atom threshold for "stable"
+      nan_penalty: -2.0         # penalty for failed evaluations
+
+    # Secondary reward: structural validity
+    - target: src.rewards.validity_reward.ValidityReward
+      weight: 0.5
+      normalize: none
+      check_charge: true
+      check_electronegativity: true
+      check_min_dist: true
+      min_dist: 0.5
+
+    # Composition constraint: must contain Ag, Bi, and I
+    - target: src.rewards.composition_reward.CompositionReward
+      weight: 0.5
+      normalize: none
+      required_elements: ["Ag", "Bi", "I"]
+      require_all: true
+
+    # Structural diversity reward
+    - target: src.rewards.diversity_reward.DiversityReward
+      weight: 0.3
+      normalize: zscore
+
+training:
+  n_iterations: 500
+  batch_size: 64
+  group_size: 8           # GRPO group size (batch_size must be divisible)
+  lr: 1.0e-5
+  clip_epsilon: 0.2       # PPO clip
+  kl_coeff: 0.01          # KL penalty against reference model
+  entropy_coeff: 0.001
+  gradient_clip: 1.0
+  n_update_steps: 4       # gradient steps per batch
+  save_every: 50
+  log_every: 10
+  output_dir: "outputs/ag_bi_i_ehull"
+
+logging:
+  wandb_project: "rl-crystal-gen"
+  wandb_entity: null      # set to your W&B username/org
