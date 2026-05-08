@@ -1,7 +1,7 @@
-# RL-Crystal-Gen
+# CLOVER-Mat
 
 **Reinforcement Learning for Crystal Structure Generation**  
-Guided by E_hull (energy above convex hull) as the reward signal.  
+Guided by E_hull (energy above convex hull) and other self-defined properties as the reward signal.  
 Built on top of [Chemeleon2](https://github.com/hspark1212/chemeleon2) (VAE + LDM backbone).
 
 ---
