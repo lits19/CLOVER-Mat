@@ -33,9 +33,9 @@ rl-crystal-gen/
 ### 1. Install
 
 ```bash
-git clone https://github.com/<your-org>/rl-crystal-gen
+git clone https://github.com/lits19/rl-crystal-gen
 cd rl-crystal-gen
-pip install -e ".[dev]"
+pip install -e .
 ```
 
 ### 2. Set up Materials Project API key
