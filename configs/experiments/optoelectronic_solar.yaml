@@ -1,0 +1,126 @@
+# configs/experiments/optoelectronic_solar.yaml
+# -----------------------------------------------
+# Multi-objective RL config targeting halide perovskite solar cell absorbers.
+#
+# Target property profile:
+#   - E_hull < 0.1 eV/atom (thermodynamic stability)
+#   - Band gap 1.0–1.8 eV (Shockley-Queisser optimum)
+#   - Carrier effective mass < 0.5 m₀ (high mobility)
+#   - Dielectric constant ε∞ > 5 (exciton screening)
+#   - Defect-tolerant (no deep traps)
+#   - Dynamically stable (no imaginary phonon modes)
+#   - Low lattice thermal conductivity (< 5 W/mK, for thermoelectric applications)
+
+experiment:
+  name: "optoelectronic_solar_halide"
+  description: >
+    Multi-objective generation of halide perovskite solar absorbers
+    targeting band gap 1.0–1.8 eV, high dielectric, low effective mass,
+    defect tolerance, and thermodynamic stability.
+  seed: 42
+
+generator:
+  type: "chemeleon2"
+  checkpoint: "checkpoints/ldm_best.ckpt"
+  vae_checkpoint: "checkpoints/vae_best.ckpt"
+  device: "cuda"
+  n_diffusion_steps: 1000
+  guidance_scale: 1.0
+  condition:
+    elements: ["Pb", "Sn", "Bi", "Sb", "I", "Br", "Cl", "Cs", "Rb", "K"]
+
+reward:
+  components:
+
+    # ── Stability ──────────────────────────────────────────────────────────
+    - target: src.rewards.ehull_reward.EhullReward
+      weight: 1.5
+      normalize: zscore
+      backend: mp_api
+      stable_threshold: 0.1
+      nan_penalty: -2.0
+
+    # ── Band gap: target 1.0–1.8 eV ───────────────────────────────────────
+    - target: src.rewards.bandgap_reward.BandGapReward
+      weight: 2.0
+      normalize: zscore
+      backend: mp_api
+      target_min: 1.0
+      target_max: 1.8
+      use_heuristic_fallback: true
+      nan_penalty: -1.0
+
+    # ── Carrier effective mass: electron m* < 0.5 m₀ ──────────────────────
+    - target: src.rewards.effective_mass_reward.EffectiveMassReward
+      weight: 1.0
+      normalize: zscore
+      carrier: electron
+      backend: mp_api
+      target_max: 0.5
+      nan_penalty: -1.0
+
+    # ── Optical absorption in visible range ────────────────────────────────
+    - target: src.rewards.optical_absorption_reward.OpticalAbsorptionReward
+      weight: 1.0
+      normalize: zscore
+      backend: mp_api
+      energy_min: 1.0
+      energy_max: 3.5
+      nan_penalty: -1.0
+
+    # ── Dielectric constant: ε∞ > 5 ───────────────────────────────────────
+    - target: src.rewards.dielectric_reward.DielectricReward
+      weight: 0.8
+      normalize: zscore
+      component: electronic
+      backend: mp_api
+      target_min: 5.0
+      use_proxy_fallback: true
+      nan_penalty: -1.0
+
+    # ── Defect tolerance ───────────────────────────────────────────────────
+    - target: src.rewards.defect_reward.DefectReward
+      weight: 1.0
+      normalize: zscore
+      backend: heuristic       # switch to "dft_results" after DFT runs
+      # dft_results_dir: "data/defect_results/"   # for post-DFT iteration
+      nan_penalty: -1.0
+
+    # ── Phonon stability ───────────────────────────────────────────────────
+    - target: src.rewards.phonon_reward.PhononReward
+      weight: 1.0
+      normalize: none
+      backend: mp_api
+      reward_type: stability   # +1 stable, -1 unstable
+      nan_penalty: -0.5        # softer penalty: MP phonon data is sparse
+
+    # ── Structural validity ────────────────────────────────────────────────
+    - target: src.rewards.validity_reward.ValidityReward
+      weight: 0.5
+      normalize: none
+      check_charge: true
+      check_electronegativity: true
+      check_min_dist: true
+
+    # ── Diversity ─────────────────────────────────────────────────────────
+    - target: src.rewards.diversity_reward.DiversityReward
+      weight: 0.3
+      normalize: zscore
+
+training:
+  n_iterations: 1000
+  batch_size: 64
+  group_size: 8
+  lr: 5.0e-6
+  clip_epsilon: 0.2
+  kl_coeff: 0.01
+  entropy_coeff: 0.001
+  gradient_clip: 1.0
+  n_update_steps: 4
+  save_every: 100
+  log_every: 10
+  output_dir: "outputs/optoelectronic_solar"
+
+logging:
+  wandb_project: "rl-crystal-gen"
+  wandb_entity: null

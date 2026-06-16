@@ -1,0 +1,93 @@
+# configs/experiments/thermoelectric.yaml
+# -----------------------------------------
+# Multi-objective RL config targeting thermoelectric materials.
+#
+# Target property profile:
+#   - E_hull < 0.1 eV/atom (stability)
+#   - Band gap 0.1–0.8 eV (narrow gap semiconductor)
+#   - Low lattice thermal conductivity κ_L (maximize ZT)
+#   - Dynamically stable (no imaginary phonons)
+#   - Heavy atoms preferred (low κ_L via phonon-phonon scattering)
+
+experiment:
+  name: "thermoelectric_chalcogenide"
+  description: >
+    Multi-objective generation of low-κ thermoelectric chalcogenides
+    targeting narrow band gap, low thermal conductivity, and stability.
+  seed: 42
+
+generator:
+  type: "chemeleon2"
+  checkpoint: "checkpoints/ldm_best.ckpt"
+  vae_checkpoint: "checkpoints/vae_best.ckpt"
+  device: "cuda"
+  n_diffusion_steps: 1000
+  condition:
+    elements: ["Pb", "Sn", "Bi", "Sb", "Te", "Se", "S", "Ag", "Cu", "Ge"]
+
+reward:
+  components:
+
+    # ── Stability ──────────────────────────────────────────────────────────
+    - target: src.rewards.ehull_reward.EhullReward
+      weight: 1.5
+      normalize: zscore
+      backend: mp_api
+      stable_threshold: 0.1
+      nan_penalty: -2.0
+
+    # ── Narrow band gap for thermoelectric ────────────────────────────────
+    - target: src.rewards.bandgap_reward.BandGapReward
+      weight: 1.5
+      normalize: zscore
+      backend: mp_api
+      target_min: 0.1
+      target_max: 0.8
+      use_heuristic_fallback: true
+      nan_penalty: -1.0
+
+    # ── Low lattice thermal conductivity ──────────────────────────────────
+    - target: src.rewards.thermal_conductivity_reward.ThermalConductivityReward
+      weight: 2.0
+      normalize: zscore
+      mode: thermoelectric
+      backend: mp_api
+      use_debye_fallback: true
+      temperature: 300.0
+      nan_penalty: -1.0
+
+    # ── Phonon stability ───────────────────────────────────────────────────
+    - target: src.rewards.phonon_reward.PhononReward
+      weight: 1.0
+      normalize: none
+      backend: mp_api
+      reward_type: stability
+      nan_penalty: -0.5
+
+    # ── Structural validity ────────────────────────────────────────────────
+    - target: src.rewards.validity_reward.ValidityReward
+      weight: 0.5
+      normalize: none
+
+    # ── Diversity ─────────────────────────────────────────────────────────
+    - target: src.rewards.diversity_reward.DiversityReward
+      weight: 0.3
+      normalize: zscore
+
+training:
+  n_iterations: 800
+  batch_size: 64
+  group_size: 8
+  lr: 5.0e-6
+  clip_epsilon: 0.2
+  kl_coeff: 0.01
+  entropy_coeff: 0.001
+  gradient_clip: 1.0
+  n_update_steps: 4
+  save_every: 100
+  log_every: 10
+  output_dir: "outputs/thermoelectric"
+
+logging:
+  wandb_project: "rl-crystal-gen"
+  wandb_entity: null
